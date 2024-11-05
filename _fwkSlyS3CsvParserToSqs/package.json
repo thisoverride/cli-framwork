@@ -1,0 +1,23 @@
+{
+  "name": "s3CsvParserToSqs",
+  "version": "1.0.0",
+  "description": "Cette fonction Lambda est déclenchée par un événement S3 lorsqu'un fichier CSV est chargé dans un bucket spécifique. Son rôle est d'extraire le fichier CSV, de le lire, puis de transformer son contenu en format JSON. Une fois la conversion effectuée, les données JSON sont envoyées à un service de gestion d'événements ou d'autres services de traitement, tels qu'une file d'attente SQS ou une base de données.",
+  "main": "main.js",
+  "author": "Euphrosine Devon",
+  "license": "MIT",
+  "scripts": {
+    "build": "yarn install --production  --modules-folder ./build/node_modules && tsc",
+    "dev": "ts-node-dev ./src/tests/main.test.ts",
+    "prod": "node ./build/main.js",
+    "unit": "jest",
+    "lint": "eslint . --ext .ts",
+    "test": "yarn build && yarn unit"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.658.1",
+    "@aws-sdk/client-sqs": "^3.658.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.7.4"
+  }
+}

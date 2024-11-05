@@ -1,0 +1,99 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: AWS::Serverless-2016-10-31
+
+Parameters:
+  nonCompliantContractInbox:
+    Type: String
+    Description: "Adresse email pour les notifications SNS"
+
+Resources:
+  AledBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      NotificationConfiguration:
+        EventBridgeConfiguration:
+          EventBridgeEnabled: true
+
+  EventRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Description: "Règle déclenchée à la création d'un objet dans le bucket"
+      EventPattern:
+        source:
+          - aws.s3
+        detail-type:
+          - Object Created
+        detail:
+          bucket:
+            name:
+              - !Ref AledBucket
+      State: ENABLED
+      Targets:
+        - Arn: !GetAtt _fwkSlyS3CsvParserToSqs.Arn
+          Id: "Lambda"
+
+  Queue:
+    Type: AWS::SQS::Queue
+    Properties:
+      VisibilityTimeout: 900
+
+  SnsNotification:
+    Type: AWS::SNS::Topic
+    Properties:
+      Subscription:
+        - Endpoint: !Ref nonCompliantContractInbox
+          Protocol: email
+
+  LambdaExecutionRole:
+    Type: "AWS::IAM::Role"
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: LambdaSQSAndSNSAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                Resource: !Sub 'arn:aws:s3:::${AledBucket}/*'
+              - Effect: Allow
+                Action:
+                  - sqs:SendMessage
+                Resource: !GetAtt Queue.Arn
+              - Effect: Allow
+                Action:
+                  - sns:Publish
+                Resource: !Ref SnsNotification
+
+  _fwkSlyS3CsvParserToSqs:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: "main.handler"
+      CodeUri: ../../../../src/serverless/_fwkSlyS3CsvParserToSqs/build
+      Runtime: nodejs18.x
+      MemorySize: 1024
+      Timeout: 900
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Environment:
+        Variables:
+          QUEUE_URL: !Ref Queue
+          SNS_TOPIC: !Ref SnsNotification
+
+  EventRuleToFunctionPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !GetAtt _fwkSlyS3CsvParserToSqs.Arn
+      Principal: !Sub events.${AWS::URLSuffix}
+      SourceArn: !GetAtt EventRule.Arn
